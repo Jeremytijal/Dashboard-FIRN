@@ -1,5 +1,4 @@
 import React from 'react';
-import { UserCircle } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
