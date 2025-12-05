@@ -2,11 +2,11 @@
 const AIRTABLE_API_KEY = import.meta.env.VITE_AIRTABLE_API_KEY;
 const AIRTABLE_BASE_ID = 'app2frF4RzVUnuyCU';
 
-// IDs des tables (à mettre à jour si besoin)
+// Noms des tables
 const TABLES = {
-    stats: 'tblmy7aFeSBAb44A0',
-    clients: 'Clients', // Nom ou ID de la table Clients
-    nps: 'NPS', // Nom ou ID de la table NPS
+    stats: 'Stats',
+    clients: 'Clients',
+    nps: 'NPS',
 };
 
 interface AirtableRecord<T> {
@@ -20,30 +20,43 @@ interface AirtableResponse<T> {
     offset?: string;
 }
 
+// Helper pour extraire une valeur d'un champ Airtable (peut être un tableau ou une valeur simple)
+function getValue(field: unknown): number {
+    if (Array.isArray(field)) {
+        return field[0] ?? 0;
+    }
+    if (typeof field === 'number') {
+        return field;
+    }
+    return 0;
+}
+
 // Types pour les données Airtable
 export interface StatsFields {
     Name: string;
     Amount: number;
-    Vendeur: string;
-    'CA du jour (€) (from Vendeur)': number;
-    'CA du mois(€) (from Vendeur)': number;
-    'PM (mois) (from Vendeur)': number;
-    'PM (Jour) - (from Vendeur)': number;
-    'Nb commandes (mois) (from Vendeur)': number;
-    'Nb commandes (Jour) (from Vendeur)': number;
-    'NPS moyenne Vendeur (from Vendeur)': number;
-    'Client repeat (from Vendeur)': number;
-    'CA du jour (€) (from Global)': number;
-    'CA du mois (€) (from Global)': number;
-    'PM (Mois) Boutique (from Global)': number;
-    'PM (Jour) Boutique (from Global)': number;
-    'NPS Moyenne Boutique (from Global)': number;
-    'Clients uniques (from Global)': number;
+    Vendeur: string[];
+    'CA du jour (€) (from Vendeur)': number[];
+    'CA du mois(€) (from Vendeur)': number[];
+    'PM (mois) (from Vendeur)': number[];
+    'PM (Jour) - (from Vendeur)': number[];
+    'Nb commandes (mois) (from Vendeur)': number[];
+    'Nb commandes (Jour) (from Vendeur)': number[];
+    'NPS moyenne Vendeur (from Vendeur)': number[];
+    'Client repeat (from Vendeur)': number[];
+    'CA du jour (€) (from Global)': number[];
+    'CA du mois (€) (from Global)': number[];
+    'PM (Mois) Boutique (from Global)': number[];
+    'PM (Jour) Boutique (from Global)': number[];
+    'NPS Moyenne Boutique (from Global)': number[];
+    'Clients uniques (from Global)': number[];
+    'Email (from Vendeur)': string[];
+    Global: string[];
 }
 
 export interface ClientFields {
     Email: string;
-    'Numéro de commande': string;
+    'Numéro de commande': number;
     Nom: string;
     Prénom: string;
     'Produit acheté': string;
@@ -63,8 +76,8 @@ export interface NPSFields {
     'Date de soumission': string;
 }
 
-// Fonction générique pour fetch Airtable
-async function fetchAirtable<T>(
+// Fonction générique pour fetch Airtable avec pagination
+async function fetchAllAirtable<T>(
     tableName: string,
     options: {
         filterByFormula?: string;
@@ -73,167 +86,374 @@ async function fetchAirtable<T>(
         view?: string;
     } = {}
 ): Promise<AirtableRecord<T>[]> {
-    const url = new URL(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}`);
+    if (!AIRTABLE_API_KEY) {
+        console.error('VITE_AIRTABLE_API_KEY non configurée');
+        return [];
+    }
 
-    if (options.filterByFormula) {
-        url.searchParams.append('filterByFormula', options.filterByFormula);
-    }
-    if (options.maxRecords) {
-        url.searchParams.append('maxRecords', options.maxRecords.toString());
-    }
-    if (options.sort) {
-        options.sort.forEach((s, i) => {
-            url.searchParams.append(`sort[${i}][field]`, s.field);
-            url.searchParams.append(`sort[${i}][direction]`, s.direction);
+    let allRecords: AirtableRecord<T>[] = [];
+    let offset: string | undefined;
+
+    do {
+        const url = new URL(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}`);
+
+        if (options.filterByFormula) {
+            url.searchParams.append('filterByFormula', options.filterByFormula);
+        }
+        if (options.maxRecords && !offset) {
+            url.searchParams.append('maxRecords', options.maxRecords.toString());
+        }
+        if (options.sort) {
+            options.sort.forEach((s, i) => {
+                url.searchParams.append(`sort[${i}][field]`, s.field);
+                url.searchParams.append(`sort[${i}][direction]`, s.direction);
+            });
+        }
+        if (options.view) {
+            url.searchParams.append('view', options.view);
+        }
+        if (offset) {
+            url.searchParams.append('offset', offset);
+        }
+
+        const response = await fetch(url.toString(), {
+            headers: {
+                Authorization: `Bearer ${AIRTABLE_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
         });
-    }
-    if (options.view) {
-        url.searchParams.append('view', options.view);
-    }
 
-    const response = await fetch(url.toString(), {
-        headers: {
-            Authorization: `Bearer ${AIRTABLE_API_KEY}`,
-            'Content-Type': 'application/json',
-        },
-    });
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('Airtable Error:', error);
+            throw new Error(`Airtable Error: ${JSON.stringify(error)}`);
+        }
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Airtable Error: ${JSON.stringify(error)}`);
-    }
+        const data: AirtableResponse<T> = await response.json();
+        allRecords = [...allRecords, ...data.records];
+        offset = data.offset;
 
-    const data: AirtableResponse<T> = await response.json();
-    return data.records;
+        // Si on a une limite, on s'arrête
+        if (options.maxRecords && allRecords.length >= options.maxRecords) {
+            break;
+        }
+    } while (offset);
+
+    return allRecords;
 }
 
-// Récupérer les stats globales et par vendeur
-export async function getStats(vendeurEmail?: string) {
-    const records = await fetchAirtable<StatsFields>(TABLES.stats, {
-        filterByFormula: vendeurEmail
-            ? `{Email (from Vendeur)} = '${vendeurEmail}'`
-            : undefined,
-    });
+// Récupérer les stats - agrège les données de tous les vendeurs
+export async function getStats() {
+    try {
+        const records = await fetchAllAirtable<StatsFields>(TABLES.stats);
 
-    // Agréger les données
-    const stats = {
-        // Données globales (boutique)
-        dailyRevenue: 0,
-        monthlyRevenue: 0,
-        dailyPM: 0,
-        monthlyPM: 0,
-        dailyUPT: 0,
-        monthlyUPT: 0,
-        npsStore: 0,
-        npsCollaborator: 0,
-        dailyBonus: 0,
-        monthlyBonus: 0,
-        repeatStore: 0,
-        repeatCollaborator: 0,
-    };
+        console.log('Stats records:', records.length);
 
-    // Trouver les lignes avec les bons noms
-    records.forEach((record) => {
-        const name = record.fields.Name;
-        const amount = record.fields.Amount || 0;
+        // On va créer un map par vendeur pour agréger
+        const vendorStats = new Map<string, {
+            dailyRevenue: number;
+            monthlyRevenue: number;
+            dailyPM: number;
+            monthlyPM: number;
+            ordersDay: number;
+            ordersMonth: number;
+            repeat: number;
+        }>();
 
-        switch (name) {
-            case 'CA du jour (€)':
-                stats.dailyRevenue = record.fields['CA du jour (€) (from Global)'] || amount;
-                break;
-            case 'CA cumulé':
-                stats.monthlyRevenue = record.fields['CA du mois (€) (from Global)'] || amount;
-                break;
-            case 'PM (€)':
-                stats.dailyPM = record.fields['PM (Jour) Boutique (from Global)'] || amount;
-                break;
-            case 'PM (Mois)':
-                stats.monthlyPM = record.fields['PM (Mois) Boutique (from Global)'] || amount;
-                break;
-            case 'NPS boutique':
-                stats.npsStore = record.fields['NPS Moyenne Boutique (from Global)'] || amount;
-                break;
-            case 'NPS collaborateur':
-                stats.npsCollaborator = record.fields['NPS moyenne Vendeur (from Vendeur)'] || amount;
-                break;
-            case 'Repeat Boutique':
-                stats.repeatStore = amount;
-                break;
-            case 'Repeat Collaborateur':
-                stats.repeatCollaborator = record.fields['Client repeat (from Vendeur)'] || amount;
-                break;
-        }
-    });
+        // Agréger par vendeur (on prend les données du premier record de chaque vendeur)
+        records.forEach((record) => {
+            const vendorEmail = getValue(record.fields['Email (from Vendeur)'] as unknown) as unknown as string;
+            if (!vendorEmail || vendorEmail === 'Global') return;
 
-    return stats;
+            const emailStr = Array.isArray(record.fields['Email (from Vendeur)']) 
+                ? record.fields['Email (from Vendeur)'][0] 
+                : '';
+            
+            if (!emailStr || vendorStats.has(emailStr)) return;
+
+            vendorStats.set(emailStr, {
+                dailyRevenue: getValue(record.fields['CA du jour (€) (from Vendeur)']),
+                monthlyRevenue: getValue(record.fields['CA du mois(€) (from Vendeur)']),
+                dailyPM: getValue(record.fields['PM (Jour) - (from Vendeur)']),
+                monthlyPM: getValue(record.fields['PM (mois) (from Vendeur)']),
+                ordersDay: getValue(record.fields['Nb commandes (Jour) (from Vendeur)']),
+                ordersMonth: getValue(record.fields['Nb commandes (mois) (from Vendeur)']),
+                repeat: getValue(record.fields['Client repeat (from Vendeur)']),
+            });
+        });
+
+        console.log('Vendeurs trouvés:', Array.from(vendorStats.keys()));
+
+        // Agréger toutes les stats vendeurs pour avoir les stats boutique
+        let totalDailyRevenue = 0;
+        let totalMonthlyRevenue = 0;
+        let totalOrdersDay = 0;
+        let totalOrdersMonth = 0;
+        let totalRepeat = 0;
+
+        vendorStats.forEach((stats) => {
+            totalDailyRevenue += stats.dailyRevenue;
+            totalMonthlyRevenue += stats.monthlyRevenue;
+            totalOrdersDay += stats.ordersDay;
+            totalOrdersMonth += stats.ordersMonth;
+            totalRepeat += stats.repeat;
+        });
+
+        // Calculer PM (Panier Moyen) = CA / Nb commandes
+        const dailyPM = totalOrdersDay > 0 ? Math.round(totalDailyRevenue / totalOrdersDay) : 0;
+        const monthlyPM = totalOrdersMonth > 0 ? Math.round(totalMonthlyRevenue / totalOrdersMonth) : 0;
+
+        const finalStats = {
+            dailyRevenue: totalDailyRevenue,
+            monthlyRevenue: totalMonthlyRevenue,
+            dailyPM,
+            monthlyPM,
+            dailyUPT: 0, // UPT non disponible dans les données
+            monthlyUPT: 0,
+            npsStore: 0, // À récupérer depuis la table NPS
+            npsCollaborator: 0,
+            dailyBonus: 0,
+            monthlyBonus: 0,
+            repeatStore: totalRepeat,
+            repeatCollaborator: 0,
+        };
+
+        console.log('Final stats:', finalStats);
+        return finalStats;
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        throw error;
+    }
 }
 
 // Récupérer les stats d'un vendeur spécifique
-export async function getVendorStats(vendeurName: string) {
-    const records = await fetchAirtable<StatsFields>(TABLES.stats, {
-        filterByFormula: `{Vendeur} = '${vendeurName}'`,
+export async function getVendorStats(vendeurEmail: string) {
+    const records = await fetchAllAirtable<StatsFields>(TABLES.stats, {
+        filterByFormula: `FIND('${vendeurEmail}', ARRAYJOIN({Email (from Vendeur)}))`,
+        maxRecords: 12,
     });
 
     if (records.length === 0) return null;
 
-    // Prendre le premier enregistrement qui contient les données du vendeur
-    const vendorRecord = records[0];
+    const firstRecord = records[0];
 
     return {
-        name: vendeurName,
-        dailyRevenue: vendorRecord.fields['CA du jour (€) (from Vendeur)'] || 0,
-        monthlyRevenue: vendorRecord.fields['CA du mois(€) (from Vendeur)'] || 0,
-        dailyPM: vendorRecord.fields['PM (Jour) - (from Vendeur)'] || 0,
-        monthlyPM: vendorRecord.fields['PM (mois) (from Vendeur)'] || 0,
-        ordersDay: vendorRecord.fields['Nb commandes (Jour) (from Vendeur)'] || 0,
-        ordersMonth: vendorRecord.fields['Nb commandes (mois) (from Vendeur)'] || 0,
-        nps: vendorRecord.fields['NPS moyenne Vendeur (from Vendeur)'] || 0,
-        repeat: vendorRecord.fields['Client repeat (from Vendeur)'] || 0,
+        email: vendeurEmail,
+        dailyRevenue: getValue(firstRecord.fields['CA du jour (€) (from Vendeur)']),
+        monthlyRevenue: getValue(firstRecord.fields['CA du mois(€) (from Vendeur)']),
+        dailyPM: getValue(firstRecord.fields['PM (Jour) - (from Vendeur)']),
+        monthlyPM: getValue(firstRecord.fields['PM (mois) (from Vendeur)']),
+        ordersDay: getValue(firstRecord.fields['Nb commandes (Jour) (from Vendeur)']),
+        ordersMonth: getValue(firstRecord.fields['Nb commandes (mois) (from Vendeur)']),
+        repeat: getValue(firstRecord.fields['Client repeat (from Vendeur)']),
     };
 }
 
 // Récupérer la liste des clients à recontacter
 export async function getClientsToContact(limit = 10) {
-    const records = await fetchAirtable<ClientFields>('Clients', {
-        filterByFormula: `AND({Contacté} = FALSE(), {Whatsapp} != '')`,
-        maxRecords: limit,
-        sort: [{ field: 'Date commande', direction: 'desc' }],
-    });
+    try {
+        const records = await fetchAllAirtable<ClientFields>(TABLES.clients, {
+            filterByFormula: `AND(NOT({Contacté}), {Whatsapp} != '')`,
+            maxRecords: limit,
+            sort: [{ field: 'Date commande', direction: 'desc' }],
+        });
 
-    return records.map((record) => ({
-        id: record.id,
-        email: record.fields.Email,
-        name: `${record.fields.Prénom} ${record.fields.Nom}`,
-        orderDate: record.fields['Date commande'],
-        amount: record.fields.Montant,
-        nps: record.fields.NPS || 0,
-        whatsapp: record.fields.Whatsapp,
-        whatsappLink: record.fields['Lien WhatsApp'],
-        vendor: record.fields['ID vendeur'] || 'Non assigné',
-        product: record.fields['Produit acheté'],
-    }));
+        console.log('Clients records:', records.length);
+
+        return records.map((record) => ({
+            id: record.id,
+            email: record.fields.Email || '',
+            name: `${record.fields.Prénom || ''} ${record.fields.Nom || ''}`.trim(),
+            orderDate: record.fields['Date commande'] || '',
+            amount: record.fields.Montant || 0,
+            nps: record.fields.NPS || 0,
+            whatsapp: record.fields.Whatsapp || '',
+            whatsappLink: record.fields['Lien WhatsApp'] || '',
+            vendor: record.fields['ID vendeur'] || 'Non assigné',
+            product: record.fields['Produit acheté'] || '',
+        }));
+    } catch (error) {
+        console.error('Error fetching clients:', error);
+        return [];
+    }
 }
 
 // Récupérer les derniers NPS
 export async function getRecentNPS(limit = 10) {
-    const records = await fetchAirtable<NPSFields>('NPS', {
-        maxRecords: limit,
-        sort: [{ field: 'Date de soumission', direction: 'desc' }],
-    });
+    try {
+        const records = await fetchAllAirtable<NPSFields>(TABLES.nps, {
+            maxRecords: limit,
+            sort: [{ field: 'Date de soumission', direction: 'desc' }],
+        });
 
-    return records.map((record) => ({
-        id: record.id,
-        email: record.fields.Email,
-        score: record.fields.Note,
-        comment: record.fields.Commentaire,
-        date: record.fields['Date de soumission'],
-    }));
+        return records.map((record) => ({
+            id: record.id,
+            email: record.fields.Email,
+            score: record.fields.Note,
+            comment: record.fields.Commentaire,
+            date: record.fields['Date de soumission'],
+        }));
+    } catch (error) {
+        console.error('Error fetching NPS:', error);
+        return [];
+    }
+}
+
+// Type pour un vendeur
+export interface Vendor {
+    email: string;
+    name: string;
+}
+
+// Récupérer la liste des vendeurs
+export async function getVendors(): Promise<Vendor[]> {
+    try {
+        const records = await fetchAllAirtable<StatsFields>(TABLES.stats);
+
+        const vendorsMap = new Map<string, string>();
+
+        records.forEach((record) => {
+            const emailArr = record.fields['Email (from Vendeur)'];
+            if (!emailArr || !Array.isArray(emailArr)) return;
+            
+            const email = emailArr[0];
+            if (!email || vendorsMap.has(email)) return;
+
+            // Extraire le nom depuis l'email ou utiliser l'email
+            const name = email.split('@')[0]
+                .replace(/[._]/g, ' ')
+                .split(' ')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+
+            vendorsMap.set(email, name);
+        });
+
+        return Array.from(vendorsMap.entries()).map(([email, name]) => ({
+            email,
+            name,
+        })).sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+        console.error('Error fetching vendors:', error);
+        return [];
+    }
+}
+
+// Récupérer les stats pour un vendeur spécifique (ou tous si pas de filtre)
+export async function getStatsByVendor(vendorEmail?: string) {
+    try {
+        const records = await fetchAllAirtable<StatsFields>(TABLES.stats);
+
+        // On va créer un map par vendeur pour agréger
+        const vendorStats = new Map<string, {
+            dailyRevenue: number;
+            monthlyRevenue: number;
+            dailyPM: number;
+            monthlyPM: number;
+            ordersDay: number;
+            ordersMonth: number;
+            repeat: number;
+            nps: number;
+        }>();
+
+        // Agréger par vendeur
+        records.forEach((record) => {
+            const emailArr = record.fields['Email (from Vendeur)'];
+            if (!emailArr || !Array.isArray(emailArr)) return;
+            
+            const emailStr = emailArr[0];
+            if (!emailStr || vendorStats.has(emailStr)) return;
+
+            vendorStats.set(emailStr, {
+                dailyRevenue: getValue(record.fields['CA du jour (€) (from Vendeur)']),
+                monthlyRevenue: getValue(record.fields['CA du mois(€) (from Vendeur)']),
+                dailyPM: getValue(record.fields['PM (Jour) - (from Vendeur)']),
+                monthlyPM: getValue(record.fields['PM (mois) (from Vendeur)']),
+                ordersDay: getValue(record.fields['Nb commandes (Jour) (from Vendeur)']),
+                ordersMonth: getValue(record.fields['Nb commandes (mois) (from Vendeur)']),
+                repeat: getValue(record.fields['Client repeat (from Vendeur)']),
+                nps: getValue(record.fields['NPS moyenne Vendeur (from Vendeur)']),
+            });
+        });
+
+        // Si on filtre par vendeur
+        if (vendorEmail) {
+            const stats = vendorStats.get(vendorEmail);
+            if (!stats) {
+                return {
+                    dailyRevenue: 0,
+                    monthlyRevenue: 0,
+                    dailyPM: 0,
+                    monthlyPM: 0,
+                    dailyUPT: 0,
+                    monthlyUPT: 0,
+                    npsStore: 0,
+                    npsCollaborator: 0,
+                    dailyBonus: 0,
+                    monthlyBonus: 0,
+                    repeatStore: 0,
+                    repeatCollaborator: 0,
+                };
+            }
+
+            return {
+                dailyRevenue: stats.dailyRevenue,
+                monthlyRevenue: stats.monthlyRevenue,
+                dailyPM: stats.dailyPM,
+                monthlyPM: stats.monthlyPM,
+                dailyUPT: 0,
+                monthlyUPT: 0,
+                npsStore: 0,
+                npsCollaborator: stats.nps,
+                dailyBonus: 0,
+                monthlyBonus: 0,
+                repeatStore: 0,
+                repeatCollaborator: stats.repeat,
+            };
+        }
+
+        // Sinon, agréger toutes les stats
+        let totalDailyRevenue = 0;
+        let totalMonthlyRevenue = 0;
+        let totalOrdersDay = 0;
+        let totalOrdersMonth = 0;
+        let totalRepeat = 0;
+
+        vendorStats.forEach((stats) => {
+            totalDailyRevenue += stats.dailyRevenue;
+            totalMonthlyRevenue += stats.monthlyRevenue;
+            totalOrdersDay += stats.ordersDay;
+            totalOrdersMonth += stats.ordersMonth;
+            totalRepeat += stats.repeat;
+        });
+
+        const dailyPM = totalOrdersDay > 0 ? Math.round(totalDailyRevenue / totalOrdersDay) : 0;
+        const monthlyPM = totalOrdersMonth > 0 ? Math.round(totalMonthlyRevenue / totalOrdersMonth) : 0;
+
+        return {
+            dailyRevenue: totalDailyRevenue,
+            monthlyRevenue: totalMonthlyRevenue,
+            dailyPM,
+            monthlyPM,
+            dailyUPT: 0,
+            monthlyUPT: 0,
+            npsStore: 0,
+            npsCollaborator: 0,
+            dailyBonus: 0,
+            monthlyBonus: 0,
+            repeatStore: totalRepeat,
+            repeatCollaborator: 0,
+        };
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        throw error;
+    }
 }
 
 // Marquer un client comme contacté
 export async function markClientAsContacted(recordId: string) {
     const response = await fetch(
-        `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/Clients/${recordId}`,
+        `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${TABLES.clients}/${recordId}`,
         {
             method: 'PATCH',
             headers: {
@@ -254,4 +474,3 @@ export async function markClientAsContacted(recordId: string) {
 
     return response.json();
 }
-

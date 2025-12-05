@@ -3,20 +3,74 @@ import { Layout } from '../components/Layout';
 import { StatCard } from '../components/StatCard';
 import { ClientList } from '../components/ClientList';
 import { useAirtable } from '../hooks/useAirtable';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronDown, Users, User } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-    const { salesData, clients, loading, error, refetch } = useAirtable();
+    const { 
+        salesData, 
+        clients, 
+        vendors, 
+        selectedVendor, 
+        setSelectedVendor, 
+        loading, 
+        error, 
+        refetch 
+    } = useAirtable();
+
+    const selectedVendorName = selectedVendor 
+        ? vendors.find(v => v.email === selectedVendor)?.name || selectedVendor
+        : 'Boutique';
 
     return (
         <Layout>
-            {/* Header avec refresh */}
+            {/* Sélecteur de vendeur */}
+            <section className="sticky top-16 z-40 -mx-4 px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                        <select
+                            value={selectedVendor || ''}
+                            onChange={(e) => setSelectedVendor(e.target.value || null)}
+                            className="w-full appearance-none bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-4 py-3 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="">🏪 Vue Boutique (Global)</option>
+                            {vendors.map((vendor) => (
+                                <option key={vendor.email} value={vendor.email}>
+                                    👤 {vendor.name}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                    </div>
+                    <button
+                        onClick={refetch}
+                        disabled={loading}
+                        className="p-3 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw className={`w-5 h-5 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
+                
+                {/* Badge vendeur actif */}
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    {selectedVendor ? (
+                        <User className="w-3.5 h-3.5" />
+                    ) : (
+                        <Users className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                        {selectedVendor ? `Stats de ${selectedVendorName}` : 'Stats globales de la boutique'}
+                    </span>
+                </div>
+            </section>
+
+            {/* Erreur */}
             {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                     {error}
                 </div>
             )}
             
+            {/* Loading */}
             {loading && (
                 <div className="flex items-center justify-center py-8">
                     <RefreshCw className="w-6 h-6 text-slate-400 animate-spin" />
@@ -26,16 +80,7 @@ export const Dashboard: React.FC = () => {
 
             {/* Indicateurs commerciaux */}
             <section>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-slate-900">Indicateurs commerciaux</h2>
-                    <button
-                        onClick={refetch}
-                        disabled={loading}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw className={`w-4 h-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                </div>
+                <h2 className="text-lg font-bold text-slate-900 mb-4">Indicateurs commerciaux</h2>
                 <div className="grid grid-cols-1 gap-4">
                     <StatCard
                         title="CA du jour (€)"
@@ -69,8 +114,14 @@ export const Dashboard: React.FC = () => {
             <section>
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Qualité de service</h2>
                 <div className="grid grid-cols-2 gap-4">
-                    <StatCard title="NPS boutique" value={salesData.npsStore} />
-                    <StatCard title="NPS collaborateur" value={salesData.npsCollaborator} />
+                    <StatCard 
+                        title={selectedVendor ? "NPS Vendeur" : "NPS boutique"} 
+                        value={selectedVendor ? salesData.npsCollaborator : salesData.npsStore} 
+                    />
+                    <StatCard 
+                        title="NPS collaborateur" 
+                        value={salesData.npsCollaborator} 
+                    />
                 </div>
             </section>
 
@@ -87,8 +138,14 @@ export const Dashboard: React.FC = () => {
             <section>
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Repeat</h2>
                 <div className="grid grid-cols-2 gap-4">
-                    <StatCard title="Repeat Boutique" value={`${salesData.repeatStore}%`} />
-                    <StatCard title="Repeat Collaborateur" value={`${salesData.repeatCollaborator}%`} />
+                    <StatCard 
+                        title={selectedVendor ? "Repeat Vendeur" : "Repeat Boutique"} 
+                        value={selectedVendor ? salesData.repeatCollaborator : salesData.repeatStore} 
+                    />
+                    <StatCard 
+                        title="Repeat Collaborateur" 
+                        value={salesData.repeatCollaborator} 
+                    />
                 </div>
             </section>
 
