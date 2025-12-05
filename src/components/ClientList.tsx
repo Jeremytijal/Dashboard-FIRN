@@ -26,7 +26,7 @@ export const ClientList: React.FC<ClientListProps> = ({ clients }) => {
 
                     <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <a
-                            href={`https://wa.me/${client.whatsapp.replace('+', '')}`}
+                            href={client.whatsappLink || `https://wa.me/${client.whatsapp?.replace('+', '')}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium"
