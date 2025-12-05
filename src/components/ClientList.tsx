@@ -1,6 +1,6 @@
 import React from 'react';
-import { Client } from '../data/mockData';
-import { Phone, Mail, MessageCircle } from 'lucide-react';
+import type { Client } from '../data/mockData';
+import { Mail, MessageCircle } from 'lucide-react';
 
 interface ClientListProps {
     clients: Client[];
