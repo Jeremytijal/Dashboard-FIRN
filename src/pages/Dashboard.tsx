@@ -18,7 +18,7 @@ export const Dashboard: React.FC = () => {
     } = useAirtable();
 
     const selectedVendorName = selectedVendor 
-        ? vendors.find(v => v.email === selectedVendor)?.name || selectedVendor
+        ? vendors.find(v => v.id === selectedVendor)?.name || selectedVendor
         : 'Boutique';
 
     return (
@@ -34,7 +34,7 @@ export const Dashboard: React.FC = () => {
                         >
                             <option value="">🏪 Vue Boutique (Global)</option>
                             {vendors.map((vendor) => (
-                                <option key={vendor.email} value={vendor.email}>
+                                <option key={vendor.id} value={vendor.id}>
                                     👤 {vendor.name}
                                 </option>
                             ))}

@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getStats, getStatsByVendor, getClientsToContact, getVendors } from '../services/airtable';
-import type { Vendor } from '../services/airtable';
+import { getShopifyStats, getShopifyVendors } from '../services/shopify';
+import type { ShopifyVendor } from '../services/shopify';
+import { getClientsToContact } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
 import { mockSalesData, mockClients } from '../data/mockData';
 
 interface UseAirtableReturn {
     salesData: SalesData;
     clients: Client[];
-    vendors: Vendor[];
+    vendors: ShopifyVendor[];
     selectedVendor: string | null;
-    setSelectedVendor: (email: string | null) => void;
+    setSelectedVendor: (id: string | null) => void;
     loading: boolean;
     error: string | null;
     refetch: () => void;
@@ -18,7 +19,7 @@ interface UseAirtableReturn {
 export function useAirtable(): UseAirtableReturn {
     const [salesData, setSalesData] = useState<SalesData>(mockSalesData);
     const [clients, setClients] = useState<Client[]>(mockClients);
-    const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [vendors, setVendors] = useState<ShopifyVendor[]>([]);
     const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -28,18 +29,34 @@ export function useAirtable(): UseAirtableReturn {
         setError(null);
 
         try {
-            // Fetch vendors, stats et clients en parallèle
-            const [vendorsResult, statsResult, clientsResult] = await Promise.all([
-                getVendors(),
-                selectedVendor ? getStatsByVendor(selectedVendor) : getStats(),
+            // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients
+            const [vendorsResult, shopifyStats, clientsResult] = await Promise.all([
+                getShopifyVendors(),
+                getShopifyStats(selectedVendor || undefined),
                 getClientsToContact(10),
             ]);
 
             setVendors(vendorsResult);
-            setSalesData(statsResult);
+            
+            // Mapper les stats Shopify vers le format SalesData
+            setSalesData({
+                dailyRevenue: shopifyStats.dailyRevenue,
+                monthlyRevenue: shopifyStats.monthlyRevenue,
+                dailyPM: shopifyStats.dailyPM,
+                monthlyPM: shopifyStats.monthlyPM,
+                dailyUPT: shopifyStats.dailyUPT,
+                monthlyUPT: shopifyStats.monthlyUPT,
+                npsStore: 0, // À récupérer depuis Airtable/NPS
+                npsCollaborator: 0,
+                dailyBonus: 0,
+                monthlyBonus: 0,
+                repeatStore: 0,
+                repeatCollaborator: 0,
+            });
+            
             setClients(clientsResult);
         } catch (err) {
-            console.error('Erreur Airtable:', err);
+            console.error('Erreur:', err);
             setError(err instanceof Error ? err.message : 'Erreur de chargement');
         } finally {
             setLoading(false);
