@@ -57,9 +57,15 @@ async function fetchAllOrders(params: Record<string, string> = {}): Promise<Shop
     let pageInfo: string | null = null;
 
     while (hasMore) {
-        const queryParams: Record<string, string> = { ...params, limit: '250' };
+        // IMPORTANT: Shopify ne permet pas d'autres params quand page_info est présent
+        let queryParams: Record<string, string>;
+        
         if (pageInfo) {
-            queryParams.page_info = pageInfo;
+            // Pour les pages suivantes, on utilise UNIQUEMENT page_info et limit
+            queryParams = { page_info: pageInfo, limit: '250' };
+        } else {
+            // Pour la première page, on utilise tous les params
+            queryParams = { ...params, limit: '250' };
         }
 
         const url = `${API_BASE}/shopify-orders?${new URLSearchParams(queryParams)}`;
