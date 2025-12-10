@@ -1,9 +1,7 @@
-// Configuration Shopify
-const SHOPIFY_STORE = 'firn-fr';
-const SHOPIFY_ACCESS_TOKEN = import.meta.env.VITE_SHOPIFY_ACCESS_TOKEN;
-const SHOPIFY_API_VERSION = '2024-01';
-
-const SHOPIFY_API_URL = `https://${SHOPIFY_STORE}.myshopify.com/admin/api/${SHOPIFY_API_VERSION}`;
+// Configuration Shopify - utilise une Netlify Function pour éviter CORS
+const API_BASE = import.meta.env.DEV 
+    ? 'http://localhost:8888/.netlify/functions' 
+    : '/.netlify/functions';
 
 // Types
 interface ShopifyOrder {
@@ -43,17 +41,16 @@ interface OrdersResponse {
 // Map pour stocker les noms des vendeurs (user_id -> name)
 const vendorNames: Record<string, string> = {
     '129870954875': 'Habib',
-    // Ajoute d'autres vendeurs ici au fur et à mesure
+    // Les autres vendeurs seront ajoutés dynamiquement
 };
 
 // Helper pour extraire le staff member ID depuis le format GraphQL
 function extractStaffId(graphqlId: string): string {
-    // Format: "gid://shopify/StaffMember/129870954875"
     const parts = graphqlId.split('/');
     return parts[parts.length - 1];
 }
 
-// Récupérer toutes les commandes avec pagination
+// Récupérer toutes les commandes avec pagination via Netlify Function
 async function fetchAllOrders(params: Record<string, string> = {}): Promise<ShopifyOrder[]> {
     const allOrders: ShopifyOrder[] = [];
     let hasMore = true;
@@ -65,22 +62,22 @@ async function fetchAllOrders(params: Record<string, string> = {}): Promise<Shop
             queryParams.page_info = pageInfo;
         }
 
-        const response = await fetch(`${SHOPIFY_API_URL}/orders.json?${new URLSearchParams(queryParams)}`, {
-            headers: {
-                'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN!,
-                'Content-Type': 'application/json',
-            },
-        });
+        const url = `${API_BASE}/shopify-orders?${new URLSearchParams(queryParams)}`;
+        console.log('Fetching:', url);
+
+        const response = await fetch(url);
 
         if (!response.ok) {
-            throw new Error(`Shopify Error: ${response.status}`);
+            const error = await response.text();
+            console.error('API Error:', error);
+            throw new Error(`API Error: ${response.status} - ${error}`);
         }
 
         const data: OrdersResponse = await response.json();
         allOrders.push(...data.orders);
 
         // Vérifier s'il y a une page suivante via le header Link
-        const linkHeader = response.headers.get('Link');
+        const linkHeader = response.headers.get('X-Shopify-Link');
         if (linkHeader && linkHeader.includes('rel="next"')) {
             const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]*).*?>; rel="next"/);
             pageInfo = nextMatch ? nextMatch[1] : null;
@@ -102,11 +99,9 @@ async function fetchAllOrders(params: Record<string, string> = {}): Promise<Shop
 // Obtenir le début du mois en ISO
 function getStartOfMonth(): string {
     const now = new Date();
-    const parisOffset = 1;
-    const parisDate = new Date(now.getTime() + parisOffset * 60 * 60 * 1000);
-    parisDate.setUTCDate(1);
-    parisDate.setUTCHours(0, 0, 0, 0);
-    return parisDate.toISOString();
+    now.setDate(1);
+    now.setHours(0, 0, 0, 0);
+    return now.toISOString();
 }
 
 // Interface pour les stats calculées
@@ -133,7 +128,7 @@ export interface ShopifyVendor {
 function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
-    const monthStr = todayStr.substring(0, 7); // YYYY-MM
+    const monthStr = todayStr.substring(0, 7);
 
     let dailyRevenue = 0;
     let monthlyRevenue = 0;
@@ -262,24 +257,3 @@ export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
         return [];
     }
 }
-
-// Export pour debug
-export async function debugOrders() {
-    const orders = await fetchAllOrders({
-        status: 'any',
-        limit: '10',
-    });
-    
-    console.log('Debug orders:', orders.map(o => ({
-        id: o.id,
-        name: o.name,
-        date: o.created_at,
-        source: o.source_name,
-        user_id: o.user_id,
-        total: o.total_price,
-        items: o.line_items.length,
-    })));
-    
-    return orders;
-}
-
