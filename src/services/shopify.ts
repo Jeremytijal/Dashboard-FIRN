@@ -157,8 +157,8 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats
 
         const orderDate = order.created_at.split('T')[0];
         const orderMonth = orderDate.substring(0, 7);
-        // Utiliser total_line_items_price = prix brut des produits (comme "Ventes brutes" dans Shopify)
-        const revenue = parseFloat(order.total_line_items_price || order.total_price);
+        // Utiliser subtotal_price = prix après réductions (sans frais de livraison)
+        const revenue = parseFloat(order.subtotal_price || order.total_price);
         const itemCount = order.line_items.reduce((sum, item) => sum + item.quantity, 0);
 
         // Stats du mois
