@@ -39,10 +39,14 @@ interface OrdersResponse {
     orders: ShopifyOrder[];
 }
 
-// Map pour stocker les noms des vendeurs (user_id -> name)
+// Map des vendeurs Shopify POS (user_id -> name)
+// IDs trouvés dans les commandes récentes
 const vendorNames: Record<string, string> = {
-    '129870954875': 'Habib',
-    // Les autres vendeurs seront ajoutés dynamiquement
+    '129870954875': 'Habib Menani',
+    '130146435451': 'Vendeur 2', // À identifier
+    '130146468219': 'Vendeur 3', // À identifier  
+    '130253029755': 'Vendeur 4', // À identifier
+    // Ajoute d'autres vendeurs ici au format: 'ID': 'Nom',
 };
 
 // Helper pour extraire le staff member ID depuis le format GraphQL
