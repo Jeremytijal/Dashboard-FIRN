@@ -11,11 +11,17 @@ export const Dashboard: React.FC = () => {
         clients, 
         vendors, 
         selectedVendor, 
-        setSelectedVendor, 
+        setSelectedVendor,
+        objectifDuJour,
         loading, 
         error, 
         refetch 
     } = useAirtable();
+
+    // Calcul du pourcentage d'atteinte de l'objectif
+    const objectifProgress = objectifDuJour && objectifDuJour > 0 
+        ? Math.round((salesData.dailyRevenue / objectifDuJour) * 100)
+        : null;
 
     const selectedVendorName = selectedVendor 
         ? vendors.find(v => v.id === selectedVendor)?.name || selectedVendor
@@ -82,11 +88,35 @@ export const Dashboard: React.FC = () => {
             <section>
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Indicateurs commerciaux</h2>
                 <div className="grid grid-cols-1 gap-4">
-                    <StatCard
-                        title="CA du jour (€)"
-                        value={salesData.dailyRevenue}
-                        className="border-l-4 border-l-blue-500"
-                    />
+                    {/* CA du jour avec objectif */}
+                    <div className="glass-card p-4 border-l-4 border-l-blue-500">
+                        <p className="text-sm text-slate-500 mb-1">CA du jour (€)</p>
+                        <p className="text-3xl font-bold text-slate-900">{salesData.dailyRevenue.toLocaleString('fr-FR')}</p>
+                        
+                        {objectifDuJour && (
+                            <div className="mt-3">
+                                <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                    <span>Objectif : {objectifDuJour.toLocaleString('fr-FR')}€</span>
+                                    <span className={`font-semibold ${objectifProgress && objectifProgress >= 100 ? 'text-green-600' : objectifProgress && objectifProgress >= 70 ? 'text-orange-500' : 'text-slate-600'}`}>
+                                        {objectifProgress}%
+                                    </span>
+                                </div>
+                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                                    <div 
+                                        className={`h-full rounded-full transition-all duration-500 ${
+                                            objectifProgress && objectifProgress >= 100 
+                                                ? 'bg-green-500' 
+                                                : objectifProgress && objectifProgress >= 70 
+                                                    ? 'bg-orange-400' 
+                                                    : 'bg-blue-500'
+                                        }`}
+                                        style={{ width: `${Math.min(objectifProgress || 0, 100)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                         <StatCard title="PM (€)" value={salesData.dailyPM} />
                         <StatCard title="UPT (Jour)" value={salesData.dailyUPT} />

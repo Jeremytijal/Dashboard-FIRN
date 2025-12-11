@@ -7,6 +7,7 @@ const TABLES = {
     stats: 'Stats',
     clients: 'Clients',
     nps: 'NPS',
+    objectifs: 'Objectifs',
 };
 
 interface AirtableRecord<T> {
@@ -74,6 +75,11 @@ export interface NPSFields {
     Note: number;
     Commentaire: string;
     'Date de soumission': string;
+}
+
+export interface ObjectifFields {
+    Date: string;
+    'Objectif du jour': number;
 }
 
 // Fonction générique pour fetch Airtable avec pagination
@@ -473,4 +479,55 @@ export async function markClientAsContacted(recordId: string) {
     }
 
     return response.json();
+}
+
+// Récupérer l'objectif du jour
+export async function getObjectifDuJour(): Promise<number | null> {
+    try {
+        // Formater la date d'aujourd'hui au format Airtable (YYYY-MM-DD)
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        
+        console.log('Recherche objectif pour:', todayStr);
+        
+        // Utiliser la vue "Objectifs du jour" qui filtre déjà sur aujourd'hui
+        const records = await fetchAllAirtable<ObjectifFields>(TABLES.objectifs, {
+            view: 'Objectifs du jour',
+            maxRecords: 1,
+        });
+
+        console.log('Objectif records:', records);
+
+        if (records.length > 0) {
+            const objectif = records[0].fields['Objectif du jour'];
+            console.log('Objectif du jour trouvé:', objectif);
+            return objectif || null;
+        }
+
+        // Si pas trouvé avec la vue, chercher manuellement par date
+        const allRecords = await fetchAllAirtable<ObjectifFields>(TABLES.objectifs, {
+            maxRecords: 50,
+            sort: [{ field: 'Date', direction: 'desc' }],
+        });
+
+        // Chercher la date d'aujourd'hui (format peut varier)
+        const todayRecord = allRecords.find(record => {
+            const dateField = record.fields.Date;
+            if (!dateField) return false;
+            
+            // Essayer différents formats
+            const recordDate = new Date(dateField);
+            return recordDate.toISOString().split('T')[0] === todayStr;
+        });
+
+        if (todayRecord) {
+            return todayRecord.fields['Objectif du jour'] || null;
+        }
+
+        console.log('Aucun objectif trouvé pour aujourd\'hui');
+        return null;
+    } catch (error) {
+        console.error('Error fetching objectif du jour:', error);
+        return null;
+    }
 }

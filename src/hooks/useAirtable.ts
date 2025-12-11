@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getShopifyStats, getShopifyVendors } from '../services/shopify';
 import type { ShopifyVendor } from '../services/shopify';
-import { getClientsToContact } from '../services/airtable';
+import { getClientsToContact, getObjectifDuJour } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
 import { mockSalesData, mockClients } from '../data/mockData';
 
@@ -11,6 +11,7 @@ interface UseAirtableReturn {
     vendors: ShopifyVendor[];
     selectedVendor: string | null;
     setSelectedVendor: (id: string | null) => void;
+    objectifDuJour: number | null;
     loading: boolean;
     error: string | null;
     refetch: () => void;
@@ -21,6 +22,7 @@ export function useAirtable(): UseAirtableReturn {
     const [clients, setClients] = useState<Client[]>(mockClients);
     const [vendors, setVendors] = useState<ShopifyVendor[]>([]);
     const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
+    const [objectifDuJour, setObjectifDuJour] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -29,14 +31,16 @@ export function useAirtable(): UseAirtableReturn {
         setError(null);
 
         try {
-            // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients
-            const [vendorsResult, shopifyStats, clientsResult] = await Promise.all([
+            // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients et objectifs
+            const [vendorsResult, shopifyStats, clientsResult, objectif] = await Promise.all([
                 getShopifyVendors(),
                 getShopifyStats(selectedVendor || undefined),
                 getClientsToContact(10),
+                getObjectifDuJour(),
             ]);
 
             setVendors(vendorsResult);
+            setObjectifDuJour(objectif);
             
             // Mapper les stats Shopify vers le format SalesData
             setSalesData({
@@ -74,6 +78,7 @@ export function useAirtable(): UseAirtableReturn {
         vendors,
         selectedVendor,
         setSelectedVendor,
+        objectifDuJour,
         loading,
         error,
         refetch: fetchData,
