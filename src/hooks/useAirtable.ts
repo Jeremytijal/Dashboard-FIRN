@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts } from '../services/shopify';
+import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts, getRepeatStats } from '../services/shopify';
 import type { ShopifyVendor } from '../services/shopify';
 import { getClientsToContact, getObjectifDuJour } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
@@ -34,13 +34,24 @@ export function useAirtable(): UseAirtableReturn {
 
         try {
             // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients et objectifs
-            const [vendorsResult, shopifyStats, globalStats, clientsResult, objectif, customerCounts] = await Promise.all([
+            const [
+                vendorsResult, 
+                shopifyStats, 
+                globalStats, 
+                globalRepeat,
+                vendorRepeat,
+                clientsResult, 
+                objectif, 
+                customerCounts
+            ] = await Promise.all([
                 getShopifyVendors(),
                 getShopifyStats(selectedVendor || undefined),
                 getShopifyStats(), // Stats globales boutique (toujours sans filtre)
+                getRepeatStats(), // Repeat global (6 mois)
+                getRepeatStats(selectedVendor || undefined), // Repeat vendeur (6 mois)
                 getClientsToContact(50),
                 getObjectifDuJour(),
-                getCustomerOrderCounts(), // Données repeat depuis Shopify
+                getCustomerOrderCounts(), // Données repeat par client depuis Shopify
             ]);
 
             setVendors(vendorsResult);
@@ -58,7 +69,7 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: globalStats.repeatRate, // Taux repeat boutique
+                repeatStore: globalRepeat.repeatRate,
                 repeatCollaborator: 0,
             });
             
@@ -74,8 +85,8 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: globalStats.repeatRate, // Taux repeat boutique (toujours global)
-                repeatCollaborator: shopifyStats.repeatRate, // Taux repeat du vendeur sélectionné
+                repeatStore: globalRepeat.repeatRate, // Toujours global
+                repeatCollaborator: vendorRepeat.repeatRate, // Repeat du vendeur sélectionné
             });
             
             // Enrichir les clients avec les données de repeat depuis Shopify

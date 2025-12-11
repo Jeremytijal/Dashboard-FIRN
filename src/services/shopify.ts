@@ -139,7 +139,7 @@ export interface ShopifyVendor {
 }
 
 // Calculer les stats à partir des commandes
-function calculateStats(orders: ShopifyOrder[], filterPOS = false, vendorId?: string): ShopifyStats {
+function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const monthStr = todayStr.substring(0, 7);
@@ -151,18 +151,12 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false, vendorId?: st
     let dailyItems = 0;
     let monthlyItems = 0;
 
-    // Pour calculer le repeat
-    const customerOrderCounts = new Map<string, number>();
-
     orders.forEach((order) => {
         // Filtrer les commandes annulées
         if (order.cancelled_at) return;
         
         // Filtrer POS si demandé
         if (filterPOS && order.source_name !== 'pos') return;
-
-        // Filtrer par vendeur si spécifié
-        if (vendorId && order.user_id?.toString() !== vendorId) return;
 
         const orderDate = order.created_at.split('T')[0];
         const orderMonth = orderDate.substring(0, 7);
@@ -183,22 +177,7 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false, vendorId?: st
             dailyOrders++;
             dailyItems += itemCount;
         }
-
-        // Compter les commandes par client (pour le repeat)
-        const email = order.customer?.email?.toLowerCase();
-        if (email) {
-            const count = customerOrderCounts.get(email) || 0;
-            customerOrderCounts.set(email, count + 1);
-        }
     });
-
-    // Calculer le taux de repeat
-    const totalCustomers = customerOrderCounts.size;
-    let repeatCount = 0;
-    customerOrderCounts.forEach((count) => {
-        if (count > 1) repeatCount++;
-    });
-    const repeatRate = totalCustomers > 0 ? Math.round((repeatCount / totalCustomers) * 100) : 0;
 
     return {
         dailyRevenue: Math.round(dailyRevenue * 100) / 100,
@@ -211,24 +190,24 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false, vendorId?: st
         monthlyUPT: monthlyOrders > 0 ? Math.round((monthlyItems / monthlyOrders) * 10) / 10 : 0,
         dailyItems,
         monthlyItems,
-        repeatRate,
-        repeatCount,
-        totalCustomers,
+        repeatRate: 0, // Calculé séparément
+        repeatCount: 0,
+        totalCustomers: 0,
     };
 }
 
 // Récupérer les stats globales (toutes les commandes POS)
 export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> {
     try {
-        // Récupérer les commandes sur 6 mois pour calculer le repeat
-        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+        // Récupérer les commandes du mois en cours pour le CA
+        const startOfMonth = getStartOfMonth();
         
         const orders = await fetchAllOrders({
             status: 'any',
-            created_at_min: sixMonthsAgo,
+            created_at_min: startOfMonth,
         });
 
-        console.log(`Shopify: ${orders.length} commandes récupérées depuis ${sixMonthsAgo}`);
+        console.log(`Shopify: ${orders.length} commandes récupérées depuis ${startOfMonth}`);
 
         // Filtrer par vendeur si spécifié
         let filteredOrders = orders;
@@ -247,7 +226,7 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
         }
 
         // Calculer les stats (uniquement POS pour la boutique)
-        const stats = calculateStats(filteredOrders, true, vendorId);
+        const stats = calculateStats(filteredOrders, true);
         
         console.log('Shopify stats:', stats);
         return stats;
@@ -257,13 +236,12 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
     }
 }
 
-// Récupérer les données de repeat par email client (nombre de commandes)
+// Récupérer les données de repeat par email client (nombre de commandes sur 6 mois)
 export async function getCustomerOrderCounts(): Promise<Map<string, number>> {
     try {
-        // Récupérer toutes les commandes POS (sans limite de date pour avoir l'historique complet)
+        // Récupérer toutes les commandes POS sur 6 mois
         const orders = await fetchAllOrders({
             status: 'any',
-            // On prend les 6 derniers mois pour le calcul du repeat
             created_at_min: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
         });
 
@@ -285,6 +263,52 @@ export async function getCustomerOrderCounts(): Promise<Map<string, number>> {
     } catch (error) {
         console.error('Error fetching customer order counts:', error);
         return new Map();
+    }
+}
+
+// Calculer le taux de repeat (sur 6 mois)
+export interface RepeatStats {
+    repeatRate: number;
+    repeatCount: number;
+    totalCustomers: number;
+}
+
+export async function getRepeatStats(vendorId?: string): Promise<RepeatStats> {
+    try {
+        // Récupérer toutes les commandes POS sur 6 mois
+        const orders = await fetchAllOrders({
+            status: 'any',
+            created_at_min: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+        const customerCounts = new Map<string, number>();
+
+        orders.forEach((order) => {
+            // Filtrer uniquement les commandes POS non annulées
+            if (order.cancelled_at || order.source_name !== 'pos') return;
+            
+            // Filtrer par vendeur si spécifié
+            if (vendorId && order.user_id?.toString() !== vendorId) return;
+            
+            const email = order.customer?.email?.toLowerCase();
+            if (!email) return;
+
+            const currentCount = customerCounts.get(email) || 0;
+            customerCounts.set(email, currentCount + 1);
+        });
+
+        const totalCustomers = customerCounts.size;
+        let repeatCount = 0;
+        customerCounts.forEach((count) => {
+            if (count > 1) repeatCount++;
+        });
+        
+        const repeatRate = totalCustomers > 0 ? Math.round((repeatCount / totalCustomers) * 100) : 0;
+
+        return { repeatRate, repeatCount, totalCustomers };
+    } catch (error) {
+        console.error('Error fetching repeat stats:', error);
+        return { repeatRate: 0, repeatCount: 0, totalCustomers: 0 };
     }
 }
 
