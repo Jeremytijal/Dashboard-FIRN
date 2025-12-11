@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts, getRepeatStats } from '../services/shopify';
+import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts } from '../services/shopify';
 import type { ShopifyVendor } from '../services/shopify';
 import { getClientsToContact, getObjectifDuJour } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
@@ -38,8 +38,6 @@ export function useAirtable(): UseAirtableReturn {
                 vendorsResult, 
                 shopifyStats, 
                 globalStats, 
-                globalRepeat,
-                vendorRepeat,
                 clientsResult, 
                 objectif, 
                 customerCounts
@@ -47,8 +45,6 @@ export function useAirtable(): UseAirtableReturn {
                 getShopifyVendors(),
                 getShopifyStats(selectedVendor || undefined),
                 getShopifyStats(), // Stats globales boutique (toujours sans filtre)
-                getRepeatStats(), // Repeat global (6 mois)
-                getRepeatStats(selectedVendor || undefined), // Repeat vendeur (6 mois)
                 getClientsToContact(50),
                 getObjectifDuJour(),
                 getCustomerOrderCounts(), // Données repeat par client depuis Shopify
@@ -69,7 +65,7 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: globalRepeat.repeatRate,
+                repeatStore: globalStats.repeatRate, // Repeat calculé sur le mois
                 repeatCollaborator: 0,
             });
             
@@ -85,8 +81,8 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: globalRepeat.repeatRate, // Toujours global
-                repeatCollaborator: vendorRepeat.repeatRate, // Repeat du vendeur sélectionné
+                repeatStore: globalStats.repeatRate, // Toujours global
+                repeatCollaborator: shopifyStats.repeatRate, // Repeat du vendeur sélectionné
             });
             
             // Enrichir les clients avec les données de repeat depuis Shopify

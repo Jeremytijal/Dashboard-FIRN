@@ -228,6 +228,12 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
         // Calculer les stats (uniquement POS pour la boutique)
         const stats = calculateStats(filteredOrders, true);
         
+        // Calculer le repeat à partir des mêmes commandes
+        const repeatStats = calculateRepeatFromOrders(orders, vendorId);
+        stats.repeatRate = repeatStats.repeatRate;
+        stats.repeatCount = repeatStats.repeatCount;
+        stats.totalCustomers = repeatStats.totalCustomers;
+        
         console.log('Shopify stats:', stats);
         return stats;
     } catch (error) {
@@ -300,38 +306,6 @@ export function calculateRepeatFromOrders(orders: ShopifyOrder[], vendorId?: str
 
     console.log(`Repeat: ${repeatCount}/${totalCustomers} clients = ${repeatRate}%`);
     return { repeatRate, repeatCount, totalCustomers };
-}
-
-// Cache des commandes pour éviter les appels multiples
-let cachedOrders: ShopifyOrder[] | null = null;
-let cacheTimestamp = 0;
-const CACHE_DURATION = 60000; // 1 minute
-
-async function getCachedOrders(): Promise<ShopifyOrder[]> {
-    const now = Date.now();
-    if (cachedOrders && (now - cacheTimestamp) < CACHE_DURATION) {
-        return cachedOrders;
-    }
-    
-    // Récupérer les commandes sur 6 mois pour le repeat
-    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
-    cachedOrders = await fetchAllOrders({
-        status: 'any',
-        created_at_min: sixMonthsAgo,
-    });
-    cacheTimestamp = now;
-    console.log(`Cache: ${cachedOrders.length} commandes récupérées`);
-    return cachedOrders;
-}
-
-export async function getRepeatStats(vendorId?: string): Promise<RepeatStats> {
-    try {
-        const orders = await getCachedOrders();
-        return calculateRepeatFromOrders(orders, vendorId);
-    } catch (error) {
-        console.error('Error fetching repeat stats:', error);
-        return { repeatRate: 0, repeatCount: 0, totalCustomers: 0 };
-    }
 }
 
 // Récupérer la liste des vendeurs depuis les commandes
