@@ -58,7 +58,7 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: 0,
+                repeatStore: globalStats.repeatRate, // Taux repeat boutique
                 repeatCollaborator: 0,
             });
             
@@ -74,8 +74,8 @@ export function useAirtable(): UseAirtableReturn {
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
-                repeatStore: 0,
-                repeatCollaborator: 0,
+                repeatStore: globalStats.repeatRate, // Taux repeat boutique (toujours global)
+                repeatCollaborator: shopifyStats.repeatRate, // Taux repeat du vendeur sélectionné
             });
             
             // Enrichir les clients avec les données de repeat depuis Shopify

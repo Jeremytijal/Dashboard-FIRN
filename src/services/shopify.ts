@@ -127,6 +127,9 @@ export interface ShopifyStats {
     monthlyUPT: number;
     dailyItems: number;
     monthlyItems: number;
+    repeatRate: number; // Taux de repeat (% clients avec +1 commande)
+    repeatCount: number; // Nombre de clients repeat
+    totalCustomers: number; // Nombre total de clients uniques
 }
 
 // Interface pour un vendeur
@@ -136,7 +139,7 @@ export interface ShopifyVendor {
 }
 
 // Calculer les stats à partir des commandes
-function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats {
+function calculateStats(orders: ShopifyOrder[], filterPOS = false, vendorId?: string): ShopifyStats {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const monthStr = todayStr.substring(0, 7);
@@ -148,12 +151,18 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats
     let dailyItems = 0;
     let monthlyItems = 0;
 
+    // Pour calculer le repeat
+    const customerOrderCounts = new Map<string, number>();
+
     orders.forEach((order) => {
         // Filtrer les commandes annulées
         if (order.cancelled_at) return;
         
         // Filtrer POS si demandé
         if (filterPOS && order.source_name !== 'pos') return;
+
+        // Filtrer par vendeur si spécifié
+        if (vendorId && order.user_id?.toString() !== vendorId) return;
 
         const orderDate = order.created_at.split('T')[0];
         const orderMonth = orderDate.substring(0, 7);
@@ -174,7 +183,22 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats
             dailyOrders++;
             dailyItems += itemCount;
         }
+
+        // Compter les commandes par client (pour le repeat)
+        const email = order.customer?.email?.toLowerCase();
+        if (email) {
+            const count = customerOrderCounts.get(email) || 0;
+            customerOrderCounts.set(email, count + 1);
+        }
     });
+
+    // Calculer le taux de repeat
+    const totalCustomers = customerOrderCounts.size;
+    let repeatCount = 0;
+    customerOrderCounts.forEach((count) => {
+        if (count > 1) repeatCount++;
+    });
+    const repeatRate = totalCustomers > 0 ? Math.round((repeatCount / totalCustomers) * 100) : 0;
 
     return {
         dailyRevenue: Math.round(dailyRevenue * 100) / 100,
@@ -187,20 +211,24 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats
         monthlyUPT: monthlyOrders > 0 ? Math.round((monthlyItems / monthlyOrders) * 10) / 10 : 0,
         dailyItems,
         monthlyItems,
+        repeatRate,
+        repeatCount,
+        totalCustomers,
     };
 }
 
-// Récupérer les stats globales (toutes les commandes POS du mois)
+// Récupérer les stats globales (toutes les commandes POS)
 export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> {
     try {
-        const startOfMonth = getStartOfMonth();
+        // Récupérer les commandes sur 6 mois pour calculer le repeat
+        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
         
         const orders = await fetchAllOrders({
             status: 'any',
-            created_at_min: startOfMonth,
+            created_at_min: sixMonthsAgo,
         });
 
-        console.log(`Shopify: ${orders.length} commandes récupérées depuis ${startOfMonth}`);
+        console.log(`Shopify: ${orders.length} commandes récupérées depuis ${sixMonthsAgo}`);
 
         // Filtrer par vendeur si spécifié
         let filteredOrders = orders;
@@ -219,7 +247,7 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
         }
 
         // Calculer les stats (uniquement POS pour la boutique)
-        const stats = calculateStats(filteredOrders, true);
+        const stats = calculateStats(filteredOrders, true, vendorId);
         
         console.log('Shopify stats:', stats);
         return stats;

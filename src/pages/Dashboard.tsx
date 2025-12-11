@@ -172,17 +172,17 @@ export const Dashboard: React.FC = () => {
                 </div>
             </section>
 
-            {/* Repeat */}
+            {/* Repeat (calculé sur 6 mois) */}
             <section>
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Repeat</h2>
                 <div className="grid grid-cols-2 gap-4">
                     <StatCard 
-                        title={selectedVendor ? "Repeat Vendeur" : "Repeat Boutique"} 
-                        value={selectedVendor ? salesData.repeatCollaborator : salesData.repeatStore} 
+                        title="Repeat Boutique" 
+                        value={`${salesData.repeatStore}%`} 
                     />
                     <StatCard 
-                        title="Repeat Collaborateur" 
-                        value={salesData.repeatCollaborator} 
+                        title={selectedVendor ? "Repeat Vendeur" : "Repeat Collaborateur"} 
+                        value={`${salesData.repeatCollaborator}%`} 
                     />
                 </div>
             </section>
