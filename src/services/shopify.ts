@@ -229,6 +229,37 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
     }
 }
 
+// Récupérer les données de repeat par email client (nombre de commandes)
+export async function getCustomerOrderCounts(): Promise<Map<string, number>> {
+    try {
+        // Récupérer toutes les commandes POS (sans limite de date pour avoir l'historique complet)
+        const orders = await fetchAllOrders({
+            status: 'any',
+            // On prend les 6 derniers mois pour le calcul du repeat
+            created_at_min: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+        const customerCounts = new Map<string, number>();
+
+        orders.forEach((order) => {
+            // Filtrer uniquement les commandes POS non annulées
+            if (order.cancelled_at || order.source_name !== 'pos') return;
+            
+            const email = order.customer?.email?.toLowerCase();
+            if (!email) return;
+
+            const currentCount = customerCounts.get(email) || 0;
+            customerCounts.set(email, currentCount + 1);
+        });
+
+        console.log(`Shopify: ${customerCounts.size} clients uniques trouvés`);
+        return customerCounts;
+    } catch (error) {
+        console.error('Error fetching customer order counts:', error);
+        return new Map();
+    }
+}
+
 // Récupérer la liste des vendeurs depuis les commandes
 export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
     try {

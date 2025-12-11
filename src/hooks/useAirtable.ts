@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getShopifyStats, getShopifyVendors } from '../services/shopify';
+import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts } from '../services/shopify';
 import type { ShopifyVendor } from '../services/shopify';
 import { getClientsToContact, getObjectifDuJour } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
@@ -34,12 +34,13 @@ export function useAirtable(): UseAirtableReturn {
 
         try {
             // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients et objectifs
-            const [vendorsResult, shopifyStats, globalStats, clientsResult, objectif] = await Promise.all([
+            const [vendorsResult, shopifyStats, globalStats, clientsResult, objectif, customerCounts] = await Promise.all([
                 getShopifyVendors(),
                 getShopifyStats(selectedVendor || undefined),
                 getShopifyStats(), // Stats globales boutique (toujours sans filtre)
-                getClientsToContact(10),
+                getClientsToContact(50),
                 getObjectifDuJour(),
+                getCustomerOrderCounts(), // Données repeat depuis Shopify
             ]);
 
             setVendors(vendorsResult);
@@ -77,7 +78,18 @@ export function useAirtable(): UseAirtableReturn {
                 repeatCollaborator: 0,
             });
             
-            setClients(clientsResult);
+            // Enrichir les clients avec les données de repeat depuis Shopify
+            const enrichedClients = clientsResult.map(client => {
+                const email = client.email?.toLowerCase();
+                const orderCount = email ? (customerCounts.get(email) || 1) : 1;
+                return {
+                    ...client,
+                    orderCount,
+                    isRepeat: orderCount > 1,
+                };
+            });
+            
+            setClients(enrichedClients);
         } catch (err) {
             console.error('Erreur:', err);
             setError(err instanceof Error ? err.message : 'Erreur de chargement');
