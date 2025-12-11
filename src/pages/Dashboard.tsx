@@ -8,6 +8,7 @@ import { RefreshCw, ChevronDown, Users, User } from 'lucide-react';
 export const Dashboard: React.FC = () => {
     const { 
         salesData, 
+        boutiqueStats,
         clients, 
         vendors, 
         selectedVendor, 
@@ -18,9 +19,9 @@ export const Dashboard: React.FC = () => {
         refetch 
     } = useAirtable();
 
-    // Calcul du pourcentage d'atteinte de l'objectif
+    // Calcul du pourcentage d'atteinte de l'objectif (toujours sur les stats boutique)
     const objectifProgress = objectifDuJour && objectifDuJour > 0 
-        ? Math.round((salesData.dailyRevenue / objectifDuJour) * 100)
+        ? Math.round((boutiqueStats.dailyRevenue / objectifDuJour) * 100)
         : null;
 
     const selectedVendorName = selectedVendor 
@@ -84,22 +85,22 @@ export const Dashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Objectif du jour */}
+            {/* Objectif du jour (toujours stats boutique) */}
             {objectifDuJour && (
                 <section className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-5 text-white shadow-lg">
                     <div className="flex items-center justify-between mb-3">
-                        <p className="text-blue-100 text-sm font-medium">🎯 Objectif du jour</p>
+                        <p className="text-blue-100 text-sm font-medium">🎯 Objectif boutique du jour</p>
                         <span className={`text-2xl font-bold ${objectifProgress && objectifProgress >= 100 ? 'text-green-300' : ''}`}>
                             {objectifProgress}%
                         </span>
                     </div>
                     <div className="flex items-end justify-between mb-3">
                         <div>
-                            <p className="text-3xl font-black">{salesData.dailyRevenue.toLocaleString('fr-FR')}€</p>
+                            <p className="text-3xl font-black">{boutiqueStats.dailyRevenue.toLocaleString('fr-FR')}€</p>
                             <p className="text-blue-200 text-sm">sur {objectifDuJour.toLocaleString('fr-FR')}€</p>
                         </div>
                         <p className="text-blue-200 text-sm">
-                            Reste : {Math.max(0, objectifDuJour - salesData.dailyRevenue).toLocaleString('fr-FR')}€
+                            Reste : {Math.max(0, objectifDuJour - boutiqueStats.dailyRevenue).toLocaleString('fr-FR')}€
                         </p>
                     </div>
                     <div className="h-3 bg-white/20 rounded-full overflow-hidden">

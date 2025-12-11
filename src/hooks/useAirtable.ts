@@ -7,6 +7,7 @@ import { mockSalesData, mockClients } from '../data/mockData';
 
 interface UseAirtableReturn {
     salesData: SalesData;
+    boutiqueStats: SalesData; // Stats globales boutique (pour l'objectif)
     clients: Client[];
     vendors: ShopifyVendor[];
     selectedVendor: string | null;
@@ -19,6 +20,7 @@ interface UseAirtableReturn {
 
 export function useAirtable(): UseAirtableReturn {
     const [salesData, setSalesData] = useState<SalesData>(mockSalesData);
+    const [boutiqueStats, setBoutiqueStats] = useState<SalesData>(mockSalesData);
     const [clients, setClients] = useState<Client[]>(mockClients);
     const [vendors, setVendors] = useState<ShopifyVendor[]>([]);
     const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
@@ -32,9 +34,10 @@ export function useAirtable(): UseAirtableReturn {
 
         try {
             // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients et objectifs
-            const [vendorsResult, shopifyStats, clientsResult, objectif] = await Promise.all([
+            const [vendorsResult, shopifyStats, globalStats, clientsResult, objectif] = await Promise.all([
                 getShopifyVendors(),
                 getShopifyStats(selectedVendor || undefined),
+                getShopifyStats(), // Stats globales boutique (toujours sans filtre)
                 getClientsToContact(10),
                 getObjectifDuJour(),
             ]);
@@ -42,7 +45,23 @@ export function useAirtable(): UseAirtableReturn {
             setVendors(vendorsResult);
             setObjectifDuJour(objectif);
             
-            // Mapper les stats Shopify vers le format SalesData
+            // Stats globales boutique (pour l'objectif)
+            setBoutiqueStats({
+                dailyRevenue: globalStats.dailyRevenue,
+                monthlyRevenue: globalStats.monthlyRevenue,
+                dailyPM: globalStats.dailyPM,
+                monthlyPM: globalStats.monthlyPM,
+                dailyUPT: globalStats.dailyUPT,
+                monthlyUPT: globalStats.monthlyUPT,
+                npsStore: 0,
+                npsCollaborator: 0,
+                dailyBonus: 0,
+                monthlyBonus: 0,
+                repeatStore: 0,
+                repeatCollaborator: 0,
+            });
+            
+            // Stats du vendeur sélectionné (ou globales si aucun)
             setSalesData({
                 dailyRevenue: shopifyStats.dailyRevenue,
                 monthlyRevenue: shopifyStats.monthlyRevenue,
@@ -50,7 +69,7 @@ export function useAirtable(): UseAirtableReturn {
                 monthlyPM: shopifyStats.monthlyPM,
                 dailyUPT: shopifyStats.dailyUPT,
                 monthlyUPT: shopifyStats.monthlyUPT,
-                npsStore: 0, // À récupérer depuis Airtable/NPS
+                npsStore: 0,
                 npsCollaborator: 0,
                 dailyBonus: 0,
                 monthlyBonus: 0,
@@ -74,6 +93,7 @@ export function useAirtable(): UseAirtableReturn {
 
     return {
         salesData,
+        boutiqueStats,
         clients,
         vendors,
         selectedVendor,
