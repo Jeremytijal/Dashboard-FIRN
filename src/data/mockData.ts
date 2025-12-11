@@ -24,6 +24,8 @@ export interface Client {
     whatsappLink?: string;
     vendor: string;
     product?: string;
+    isRepeat?: boolean;
+    orderCount?: number;
 }
 
 // Données par défaut (utilisées en fallback)

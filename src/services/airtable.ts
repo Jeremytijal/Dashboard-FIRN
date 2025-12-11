@@ -68,7 +68,20 @@ export interface ClientFields {
     'Lien WhatsApp': string;
     'ID vendeur': string;
     Contacté: boolean;
+    Canal?: string;
+    Repeat?: boolean;
+    'Nombre de commandes'?: number;
 }
+
+// Map des vendeurs Shopify (ID -> Nom)
+const vendorNamesMap: Record<string, string> = {
+    '129862140283': 'Jérémy',
+    '129870954875': 'Habib',
+    '129338540411': 'Sacha',
+    '130146435451': 'Maelle Peiffer',
+    '130146468219': 'Fiona Couteau',
+    '130156593531': 'Kelly Barou Dagues',
+};
 
 export interface NPSFields {
     Email: string;
@@ -255,29 +268,38 @@ export async function getVendorStats(vendeurEmail: string) {
     };
 }
 
-// Récupérer la liste des clients à recontacter
-export async function getClientsToContact(limit = 10) {
+// Récupérer la liste des clients à recontacter (POS + 30 jours)
+export async function getClientsToContact(limit = 50) {
     try {
+        // Utiliser la vue "POS + 30j" qui filtre déjà les clients POS + 30 jours
         const records = await fetchAllAirtable<ClientFields>(TABLES.clients, {
-            filterByFormula: `AND(NOT({Contacté}), {Whatsapp} != '')`,
+            view: 'POS + 30j',
             maxRecords: limit,
             sort: [{ field: 'Date commande', direction: 'desc' }],
         });
 
-        console.log('Clients records:', records.length);
+        console.log('Clients records (POS + 30j):', records.length);
 
-        return records.map((record) => ({
-            id: record.id,
-            email: record.fields.Email || '',
-            name: `${record.fields.Prénom || ''} ${record.fields.Nom || ''}`.trim(),
-            orderDate: record.fields['Date commande'] || '',
-            amount: record.fields.Montant || 0,
-            nps: record.fields.NPS || 0,
-            whatsapp: record.fields.Whatsapp || '',
-            whatsappLink: record.fields['Lien WhatsApp'] || '',
-            vendor: record.fields['ID vendeur'] || 'Non assigné',
-            product: record.fields['Produit acheté'] || '',
-        }));
+        return records.map((record) => {
+            // Mapper l'ID vendeur au nom
+            const vendorId = record.fields['ID vendeur'] || '';
+            const vendorName = vendorNamesMap[vendorId] || vendorId || 'Non assigné';
+            
+            return {
+                id: record.id,
+                email: record.fields.Email || '',
+                name: `${record.fields.Prénom || ''} ${record.fields.Nom || ''}`.trim(),
+                orderDate: record.fields['Date commande'] || '',
+                amount: record.fields.Montant || 0,
+                nps: record.fields.NPS || 0,
+                whatsapp: record.fields.Whatsapp || '',
+                whatsappLink: record.fields['Lien WhatsApp'] || '',
+                vendor: vendorName,
+                product: record.fields['Produit acheté'] || '',
+                isRepeat: record.fields.Repeat || false,
+                orderCount: record.fields['Nombre de commandes'] || 1,
+            };
+        });
     } catch (error) {
         console.error('Error fetching clients:', error);
         return [];
