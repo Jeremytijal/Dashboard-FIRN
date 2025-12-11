@@ -46,7 +46,7 @@ const vendorNames: Record<string, string> = {
     '129338540411': 'Sacha',
     '130146435451': 'Maelle Peiffer',
     '130146468219': 'Fiona Couteau',
-    // Kelly Barou Dagues - ID à ajouter si trouvé
+    '130156593531': 'Kelly Barou Dagues',
 };
 
 // Helper pour extraire le staff member ID depuis le format GraphQL
