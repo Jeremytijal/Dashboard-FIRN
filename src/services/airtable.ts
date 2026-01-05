@@ -268,6 +268,14 @@ export async function getVendorStats(vendeurEmail: string) {
     };
 }
 
+// Helper pour extraire l'ID numérique depuis le format GraphQL Shopify
+function extractVendorId(graphqlId: string): string {
+    if (!graphqlId) return '';
+    // Format: "gid://shopify/StaffMember/129870954875" ou juste "129870954875"
+    const parts = graphqlId.split('/');
+    return parts[parts.length - 1];
+}
+
 // Récupérer la liste des clients à recontacter (POS + 30 jours)
 export async function getClientsToContact(limit = 50) {
     try {
@@ -281,9 +289,10 @@ export async function getClientsToContact(limit = 50) {
         console.log('Clients records (POS + 30j):', records.length);
 
         return records.map((record) => {
-            // Mapper l'ID vendeur au nom
-            const vendorId = record.fields['ID vendeur'] || '';
-            const vendorName = vendorNamesMap[vendorId] || vendorId || 'Non assigné';
+            // Mapper l'ID vendeur au nom (extraire l'ID numérique du format GraphQL)
+            const rawVendorId = record.fields['ID vendeur'] || '';
+            const vendorId = extractVendorId(rawVendorId);
+            const vendorName = vendorNamesMap[vendorId] || (vendorId ? `Vendeur ${vendorId.slice(-4)}` : 'Non assigné');
             
             return {
                 id: record.id,

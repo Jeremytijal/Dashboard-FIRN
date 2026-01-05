@@ -163,16 +163,7 @@ export const Dashboard: React.FC = () => {
                 </div>
             </section>
 
-            {/* Prime vendeur */}
-            <section className="bg-blue-50/50 -mx-4 px-4 py-6 rounded-xl">
-                <h2 className="text-lg font-bold text-slate-900 mb-4">Prime vendeur</h2>
-                <div className="grid grid-cols-2 gap-4">
-                    <StatCard title="Cumul du jour" value={salesData.dailyBonus} />
-                    <StatCard title="Cumul du mois" value={salesData.monthlyBonus} />
-                </div>
-            </section>
-
-            {/* Repeat (calculé sur 6 mois) */}
+            {/* Repeat (calculé sur le mois) */}
             <section>
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Repeat</h2>
                 <div className="grid grid-cols-2 gap-4">
