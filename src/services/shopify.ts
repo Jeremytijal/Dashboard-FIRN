@@ -14,6 +14,7 @@ interface ShopifyOrder {
     total_line_items_price: string; // Prix brut des produits (avant réductions)
     source_name: string;
     user_id: number | null;
+    location_id: number | null; // ID de la boutique POS
     financial_status: string;
     cancelled_at: string | null;
     line_items: ShopifyLineItem[];
@@ -48,6 +49,18 @@ const vendorNames: Record<string, string> = {
     '130146468219': 'Fiona Couteau',
     '130156593531': 'Kelly Barou Dagues',
 };
+
+// Map des boutiques Shopify POS (location_id -> name)
+// Ces IDs seront détectés automatiquement au premier chargement
+const locationNames: Record<string, string> = {
+    // Les IDs seront ajoutés une fois connus
+};
+
+// Interface pour une boutique
+export interface ShopifyLocation {
+    id: string;
+    name: string;
+}
 
 // Helper pour extraire le staff member ID depuis le format GraphQL
 function extractStaffId(graphqlId: string): string {
@@ -196,8 +209,14 @@ function calculateStats(orders: ShopifyOrder[], filterPOS = false): ShopifyStats
     };
 }
 
+// Options de filtrage pour les stats
+export interface StatsFilter {
+    vendorId?: string;
+    locationId?: string;
+}
+
 // Récupérer les stats globales (toutes les commandes POS)
-export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> {
+export async function getShopifyStats(filter?: StatsFilter): Promise<ShopifyStats> {
     try {
         // Récupérer les commandes du mois en cours pour le CA
         const startOfMonth = getStartOfMonth();
@@ -209,17 +228,25 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
 
         console.log(`Shopify: ${orders.length} commandes récupérées depuis ${startOfMonth}`);
 
-        // Filtrer par vendeur si spécifié
+        // Filtrer par boutique si spécifié
         let filteredOrders = orders;
-        if (vendorId) {
-            filteredOrders = orders.filter((order) => {
+        if (filter?.locationId) {
+            filteredOrders = filteredOrders.filter((order) => 
+                order.location_id?.toString() === filter.locationId
+            );
+            console.log(`Filtré par boutique ${filter.locationId}: ${filteredOrders.length} commandes`);
+        }
+
+        // Filtrer par vendeur si spécifié
+        if (filter?.vendorId) {
+            filteredOrders = filteredOrders.filter((order) => {
                 // Vérifier user_id (pour les commandes POS)
-                if (order.user_id?.toString() === vendorId) return true;
+                if (order.user_id?.toString() === filter.vendorId) return true;
                 
                 // Vérifier attributed_staffs dans les line_items
                 return order.line_items.some((item) =>
                     item.attributed_staffs?.some(
-                        (staff) => extractStaffId(staff.id) === vendorId
+                        (staff) => extractStaffId(staff.id) === filter.vendorId
                     )
                 );
             });
@@ -228,8 +255,11 @@ export async function getShopifyStats(vendorId?: string): Promise<ShopifyStats> 
         // Calculer les stats (uniquement POS pour la boutique)
         const stats = calculateStats(filteredOrders, true);
         
-        // Calculer le repeat à partir des mêmes commandes
-        const repeatStats = calculateRepeatFromOrders(orders, vendorId);
+        // Calculer le repeat à partir des commandes filtrées par boutique (ou toutes)
+        const ordersForRepeat = filter?.locationId 
+            ? orders.filter(o => o.location_id?.toString() === filter.locationId)
+            : orders;
+        const repeatStats = calculateRepeatFromOrders(ordersForRepeat, filter?.vendorId);
         stats.repeatRate = repeatStats.repeatRate;
         stats.repeatCount = repeatStats.repeatCount;
         stats.totalCustomers = repeatStats.totalCustomers;
@@ -308,8 +338,13 @@ export function calculateRepeatFromOrders(orders: ShopifyOrder[], vendorId?: str
     return { repeatRate, repeatCount, totalCustomers };
 }
 
-// Récupérer la liste des vendeurs depuis les commandes
-export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
+// Récupérer la liste des vendeurs et boutiques depuis les commandes
+export interface VendorsAndLocations {
+    vendors: ShopifyVendor[];
+    locations: ShopifyLocation[];
+}
+
+export async function getShopifyVendorsAndLocations(): Promise<VendorsAndLocations> {
     try {
         const startOfMonth = getStartOfMonth();
         
@@ -319,9 +354,18 @@ export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
         });
 
         const vendorsMap = new Map<string, string>();
+        const locationsMap = new Map<string, string>();
 
         orders.forEach((order) => {
-            // Extraire depuis user_id
+            // Extraire boutique depuis location_id
+            if (order.location_id && order.source_name === 'pos') {
+                const locationId = order.location_id.toString();
+                if (!locationsMap.has(locationId)) {
+                    locationsMap.set(locationId, locationNames[locationId] || `Boutique ${locationId.slice(-4)}`);
+                }
+            }
+
+            // Extraire vendeur depuis user_id
             if (order.user_id && order.source_name === 'pos') {
                 const id = order.user_id.toString();
                 if (!vendorsMap.has(id)) {
@@ -340,11 +384,26 @@ export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
             });
         });
 
-        return Array.from(vendorsMap.entries())
+        // Log les IDs de boutiques trouvés pour les identifier
+        console.log('Boutiques trouvées:', Array.from(locationsMap.entries()));
+
+        const vendors = Array.from(vendorsMap.entries())
             .map(([id, name]) => ({ id, name }))
             .sort((a, b) => a.name.localeCompare(b.name));
+
+        const locations = Array.from(locationsMap.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        return { vendors, locations };
     } catch (error) {
-        console.error('Error fetching vendors:', error);
-        return [];
+        console.error('Error fetching vendors and locations:', error);
+        return { vendors: [], locations: [] };
     }
+}
+
+// Récupérer la liste des vendeurs (rétrocompatibilité)
+export async function getShopifyVendors(): Promise<ShopifyVendor[]> {
+    const { vendors } = await getShopifyVendorsAndLocations();
+    return vendors;
 }

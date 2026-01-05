@@ -3,16 +3,19 @@ import { Layout } from '../components/Layout';
 import { StatCard } from '../components/StatCard';
 import { ClientList } from '../components/ClientList';
 import { useAirtable } from '../hooks/useAirtable';
-import { RefreshCw, ChevronDown, Users, User } from 'lucide-react';
+import { RefreshCw, ChevronDown, Users, User, Store } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
     const { 
         salesData, 
         boutiqueStats,
         clients, 
-        vendors, 
+        vendors,
+        locations,
         selectedVendor, 
         setSelectedVendor,
+        selectedLocation,
+        setSelectedLocation,
         objectifDuJour,
         loading, 
         error, 
@@ -24,27 +27,70 @@ export const Dashboard: React.FC = () => {
         ? Math.round((boutiqueStats.dailyRevenue / objectifDuJour) * 100)
         : null;
 
-    const selectedVendorName = selectedVendor 
-        ? vendors.find(v => v.id === selectedVendor)?.name || selectedVendor
-        : 'Boutique';
+    // Détermine le label du filtre actif
+    const getFilterLabel = () => {
+        if (selectedVendor) {
+            return vendors.find(v => v.id === selectedVendor)?.name || selectedVendor;
+        }
+        if (selectedLocation) {
+            return locations.find(l => l.id === selectedLocation)?.name || selectedLocation;
+        }
+        return 'Global (toutes boutiques)';
+    };
+
+    // Gère le changement de sélection
+    const handleSelectionChange = (value: string) => {
+        if (value === '') {
+            setSelectedVendor(null);
+            setSelectedLocation(null);
+        } else if (value.startsWith('location:')) {
+            setSelectedVendor(null);
+            setSelectedLocation(value.replace('location:', ''));
+        } else if (value.startsWith('vendor:')) {
+            setSelectedLocation(null);
+            setSelectedVendor(value.replace('vendor:', ''));
+        }
+    };
+
+    // Valeur actuelle du select
+    const currentSelectValue = selectedVendor 
+        ? `vendor:${selectedVendor}` 
+        : selectedLocation 
+            ? `location:${selectedLocation}` 
+            : '';
 
     return (
         <Layout>
-            {/* Sélecteur de vendeur */}
+            {/* Sélecteur de boutique/vendeur */}
             <section className="sticky top-16 z-40 -mx-4 px-4 py-3 bg-white/80 backdrop-blur-md border-b border-slate-100">
                 <div className="flex items-center gap-3">
                     <div className="relative flex-1">
                         <select
-                            value={selectedVendor || ''}
-                            onChange={(e) => setSelectedVendor(e.target.value || null)}
+                            value={currentSelectValue}
+                            onChange={(e) => handleSelectionChange(e.target.value)}
                             className="w-full appearance-none bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-4 py-3 pr-10 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                            <option value="">🏪 Vue Boutique (Global)</option>
-                            {vendors.map((vendor) => (
-                                <option key={vendor.id} value={vendor.id}>
-                                    👤 {vendor.name}
-                                </option>
-                            ))}
+                            <option value="">🏪 Vue Globale (Toutes boutiques)</option>
+                            
+                            {locations.length > 0 && (
+                                <optgroup label="📍 Boutiques">
+                                    {locations.map((location) => (
+                                        <option key={location.id} value={`location:${location.id}`}>
+                                            🏬 {location.name}
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
+                            
+                            {vendors.length > 0 && (
+                                <optgroup label="👥 Vendeurs">
+                                    {vendors.map((vendor) => (
+                                        <option key={vendor.id} value={`vendor:${vendor.id}`}>
+                                            👤 {vendor.name}
+                                        </option>
+                                    ))}
+                                </optgroup>
+                            )}
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                     </div>
@@ -57,15 +103,17 @@ export const Dashboard: React.FC = () => {
                     </button>
                 </div>
                 
-                {/* Badge vendeur actif */}
+                {/* Badge filtre actif */}
                 <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                     {selectedVendor ? (
                         <User className="w-3.5 h-3.5" />
+                    ) : selectedLocation ? (
+                        <Store className="w-3.5 h-3.5" />
                     ) : (
                         <Users className="w-3.5 h-3.5" />
                     )}
                     <span>
-                        {selectedVendor ? `Stats de ${selectedVendorName}` : 'Stats globales de la boutique'}
+                        Stats : {getFilterLabel()}
                     </span>
                 </div>
             </section>
@@ -168,11 +216,11 @@ export const Dashboard: React.FC = () => {
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Repeat</h2>
                 <div className="grid grid-cols-2 gap-4">
                     <StatCard 
-                        title="Repeat Boutique" 
+                        title="Repeat Global" 
                         value={`${salesData.repeatStore}%`} 
                     />
                     <StatCard 
-                        title={selectedVendor ? "Repeat Vendeur" : "Repeat Collaborateur"} 
+                        title={selectedVendor ? "Repeat Vendeur" : selectedLocation ? "Repeat Boutique" : "Repeat Filtre"} 
                         value={`${salesData.repeatCollaborator}%`} 
                     />
                 </div>

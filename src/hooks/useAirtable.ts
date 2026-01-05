@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getShopifyStats, getShopifyVendors, getCustomerOrderCounts } from '../services/shopify';
-import type { ShopifyVendor } from '../services/shopify';
+import { getShopifyStats, getShopifyVendorsAndLocations, getCustomerOrderCounts } from '../services/shopify';
+import type { ShopifyVendor, ShopifyLocation } from '../services/shopify';
 import { getClientsToContact, getObjectifDuJour } from '../services/airtable';
 import type { SalesData, Client } from '../data/mockData';
 import { mockSalesData, mockClients } from '../data/mockData';
@@ -10,8 +10,11 @@ interface UseAirtableReturn {
     boutiqueStats: SalesData; // Stats globales boutique (pour l'objectif)
     clients: Client[];
     vendors: ShopifyVendor[];
+    locations: ShopifyLocation[];
     selectedVendor: string | null;
     setSelectedVendor: (id: string | null) => void;
+    selectedLocation: string | null;
+    setSelectedLocation: (id: string | null) => void;
     objectifDuJour: number | null;
     loading: boolean;
     error: string | null;
@@ -23,7 +26,9 @@ export function useAirtable(): UseAirtableReturn {
     const [boutiqueStats, setBoutiqueStats] = useState<SalesData>(mockSalesData);
     const [clients, setClients] = useState<Client[]>(mockClients);
     const [vendors, setVendors] = useState<ShopifyVendor[]>([]);
+    const [locations, setLocations] = useState<ShopifyLocation[]>([]);
     const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
+    const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
     const [objectifDuJour, setObjectifDuJour] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -33,24 +38,31 @@ export function useAirtable(): UseAirtableReturn {
         setError(null);
 
         try {
+            // Construire le filtre actuel
+            const currentFilter = {
+                vendorId: selectedVendor || undefined,
+                locationId: selectedLocation || undefined,
+            };
+
             // Fetch en parallèle : Shopify pour les stats, Airtable pour les clients et objectifs
             const [
-                vendorsResult, 
+                vendorsAndLocations, 
                 shopifyStats, 
                 globalStats, 
                 clientsResult, 
                 objectif, 
                 customerCounts
             ] = await Promise.all([
-                getShopifyVendors(),
-                getShopifyStats(selectedVendor || undefined),
+                getShopifyVendorsAndLocations(),
+                getShopifyStats(currentFilter),
                 getShopifyStats(), // Stats globales boutique (toujours sans filtre)
                 getClientsToContact(50),
                 getObjectifDuJour(),
                 getCustomerOrderCounts(), // Données repeat par client depuis Shopify
             ]);
 
-            setVendors(vendorsResult);
+            setVendors(vendorsAndLocations.vendors);
+            setLocations(vendorsAndLocations.locations);
             setObjectifDuJour(objectif);
             
             // Stats globales boutique (pour l'objectif)
@@ -69,7 +81,7 @@ export function useAirtable(): UseAirtableReturn {
                 repeatCollaborator: 0,
             });
             
-            // Stats du vendeur sélectionné (ou globales si aucun)
+            // Stats du vendeur/boutique sélectionné (ou globales si aucun)
             setSalesData({
                 dailyRevenue: shopifyStats.dailyRevenue,
                 monthlyRevenue: shopifyStats.monthlyRevenue,
@@ -82,7 +94,7 @@ export function useAirtable(): UseAirtableReturn {
                 dailyBonus: 0,
                 monthlyBonus: 0,
                 repeatStore: globalStats.repeatRate, // Toujours global
-                repeatCollaborator: shopifyStats.repeatRate, // Repeat du vendeur sélectionné
+                repeatCollaborator: shopifyStats.repeatRate, // Repeat du filtre actuel
             });
             
             // Enrichir les clients avec les données de repeat depuis Shopify
@@ -103,7 +115,7 @@ export function useAirtable(): UseAirtableReturn {
         } finally {
             setLoading(false);
         }
-    }, [selectedVendor]);
+    }, [selectedVendor, selectedLocation]);
 
     // Charger les données au démarrage et quand le vendeur change
     useEffect(() => {
@@ -115,8 +127,11 @@ export function useAirtable(): UseAirtableReturn {
         boutiqueStats,
         clients,
         vendors,
+        locations,
         selectedVendor,
         setSelectedVendor,
+        selectedLocation,
+        setSelectedLocation,
         objectifDuJour,
         loading,
         error,
