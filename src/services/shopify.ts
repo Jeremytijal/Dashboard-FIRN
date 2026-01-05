@@ -51,9 +51,9 @@ const vendorNames: Record<string, string> = {
 };
 
 // Map des boutiques Shopify POS (location_id -> name)
-// Ces IDs seront détectés automatiquement au premier chargement
 const locationNames: Record<string, string> = {
-    // Les IDs seront ajoutés une fois connus
+    '107488838011': 'Boutique Vieille du Temple',
+    '107474682235': 'Boutique Montorgueil',
 };
 
 // Interface pour une boutique
